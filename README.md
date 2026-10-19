@@ -34,3 +34,15 @@ probabilities, and no-margin decimal odds.
 Team names must match the source CSV. Run `soccer-model` without teams to print
 the available names. Model prices are illustrative and are not betting advice.
 
+## Web dashboard
+
+Run the Streamlit portfolio app locally:
+
+```bash
+python -m streamlit run app.py
+```
+
+To publish it, create an app at [Streamlit Community
+Cloud](https://share.streamlit.io/), select this repository and the `main`
+branch, and use `app.py` as the main file path.
+
