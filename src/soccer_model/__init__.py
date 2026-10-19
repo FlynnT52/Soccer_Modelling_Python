@@ -5,6 +5,7 @@ from .model import (
     current_season_start,
     football_data_url,
     load_matches,
+    matches_from_json,
 )
 
 __all__ = [
@@ -12,5 +13,6 @@ __all__ = [
     "current_season_start",
     "football_data_url",
     "load_matches",
+    "matches_from_json",
 ]
 

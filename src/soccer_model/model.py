@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import BinaryIO
 from urllib.request import Request, urlopen
@@ -78,6 +78,14 @@ def load_matches(source: str | Path) -> pd.DataFrame:
     matches = matches.reset_index(drop=True)
     if matches.empty:
         raise ValueError("CSV contains no completed matches")
+    return matches
+
+
+def matches_from_json(serialized: str) -> pd.DataFrame:
+    """Restore cached matches without treating JSON text as a file path."""
+
+    matches = pd.read_json(StringIO(serialized), orient="split")
+    matches["Date"] = pd.to_datetime(matches["Date"])
     return matches
 
 

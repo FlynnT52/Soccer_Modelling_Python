@@ -11,6 +11,7 @@ from soccer_model import (
     current_season_start,
     football_data_url,
     load_matches,
+    matches_from_json,
 )
 
 LEAGUES = {
@@ -34,8 +35,7 @@ def download_matches(url: str) -> pd.DataFrame:
 def fit_model(matches_csv: str, half_life_days: float) -> PoissonFootballModel:
     """Fit once for a given cleaned dataset and modelling configuration."""
 
-    matches = pd.read_json(matches_csv, orient="split")
-    matches["Date"] = pd.to_datetime(matches["Date"])
+    matches = matches_from_json(matches_csv)
     return PoissonFootballModel.fit(matches, half_life_days=half_life_days)
 
 

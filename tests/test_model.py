@@ -8,6 +8,7 @@ from soccer_model.model import (
     current_season_start,
     football_data_url,
     load_matches,
+    matches_from_json,
     season_code,
 )
 
@@ -64,4 +65,10 @@ def test_unknown_team_has_clear_error(matches):
     model = PoissonFootballModel.fit(matches)
     with pytest.raises(ValueError, match="unknown team"):
         model.expected_goals("Alpha", "Unknown")
+
+
+def test_cached_matches_json_round_trip(matches):
+    serialized = matches.to_json(orient="split", date_format="iso")
+    restored = matches_from_json(serialized)
+    pd.testing.assert_frame_equal(restored, matches)
 
