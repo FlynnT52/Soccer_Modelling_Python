@@ -204,10 +204,6 @@ with st.expander("How the model works"):
         the selected half-life. Selecting an earlier training season downloads
         and combines every season from that point through the current season;
         the team selectors still show only clubs active in the current season.
-
-        The displayed odds are no-margin model estimates. They are illustrative,
-        not financial or betting advice. A production forecasting system should
-        also be evaluated on matches that were not used for training.
         """
     )
 
