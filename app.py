@@ -22,13 +22,28 @@ LEAGUES = {
     "Serie A (Italy)": "I1",
     "Ligue 1 (France)": "F1",
 }
+CURRENT_SEASON_START = current_season_start()
 
 
 @st.cache_data(ttl=60 * 60, show_spinner=False)
-def download_matches(url: str) -> pd.DataFrame:
-    """Download results at most once an hour per Streamlit server."""
+def download_matches(
+    first_season_start: int, last_season_start: int, division: str
+) -> pd.DataFrame:
+    """Download and combine every season in an inclusive year range."""
 
-    return load_matches(url)
+    seasons = []
+    for season_start in range(first_season_start, last_season_start + 1):
+        url = football_data_url(season_start, division)
+        try:
+            season = load_matches(url)
+        except Exception as error:
+            raise RuntimeError(
+                f"Could not load the {season_start}/{season_start + 1} season "
+                f"from {url}: {error}"
+            ) from error
+        season["SeasonStart"] = season_start
+        seasons.append(season)
+    return pd.concat(seasons, ignore_index=True).sort_values("Date").reset_index(drop=True)
 
 
 @st.cache_resource(show_spinner=False)
@@ -65,13 +80,16 @@ st.caption(
 with st.sidebar:
     st.header("Model settings")
     league_name = st.selectbox("League", list(LEAGUES))
-    season_start = st.number_input(
-        "Season starting year",
+    first_season_start = st.number_input(
+        "Train from season starting year",
         min_value=2000,
-        max_value=2098,
-        value=current_season_start(),
+        max_value=CURRENT_SEASON_START,
+        value=CURRENT_SEASON_START,
         step=1,
-        help="For the 2026/27 season, enter 2026.",
+        help=(
+            "The model includes this season and every season through the current one. "
+            "For 2023/24 onward, enter 2023."
+        ),
     )
     half_life = st.slider(
         "Form half-life (days)",
@@ -83,30 +101,40 @@ with st.sidebar:
     )
 
 division = LEAGUES[league_name]
-data_url = football_data_url(int(season_start), division)
+first_season_start = int(first_season_start)
+latest_data_url = football_data_url(CURRENT_SEASON_START, division)
 
 try:
-    with st.spinner("Downloading results and fitting the model…"):
-        matches = download_matches(data_url)
+    season_count = CURRENT_SEASON_START - first_season_start + 1
+    with st.spinner(
+        f"Downloading {season_count} season{'s' if season_count != 1 else ''} "
+        "and fitting the model…"
+    ):
+        matches = download_matches(first_season_start, CURRENT_SEASON_START, division)
         serialized_matches = matches.to_json(orient="split", date_format="iso")
         model = fit_model(serialized_matches, float(half_life))
 except Exception as error:
     st.error("The latest results could not be downloaded or modelled.")
     st.code(str(error))
-    st.markdown(f"You can check the [source CSV]({data_url}) directly.")
+    st.markdown(f"You can check the [latest source CSV]({latest_data_url}) directly.")
     st.stop()
 
 latest_result = matches["Date"].max()
+current_matches = matches.loc[matches["SeasonStart"] == CURRENT_SEASON_START]
+current_teams = tuple(
+    sorted(set(current_matches["HomeTeam"]).union(current_matches["AwayTeam"]))
+)
 st.success(
-    f"Model fitted using {len(matches)} completed matches through "
-    f"{latest_result:%d %B %Y}."
+    f"Model fitted using {len(matches)} completed matches across {season_count} "
+    f"season{'s' if season_count != 1 else ''}, from "
+    f"{matches['Date'].min():%d %B %Y} through {latest_result:%d %B %Y}."
 )
 
 selection_left, selection_right = st.columns(2)
 with selection_left:
-    home_team = st.selectbox("Home team", model.teams, index=0)
+    home_team = st.selectbox("Home team", current_teams, index=0)
 with selection_right:
-    away_options = tuple(team for team in model.teams if team != home_team)
+    away_options = tuple(team for team in current_teams if team != home_team)
     away_team = st.selectbox("Away team", away_options, index=min(1, len(away_options) - 1))
 
 home_xg, away_xg = model.expected_goals(home_team, away_team)
@@ -173,7 +201,9 @@ with st.expander("How the model works"):
         The model estimates an attacking and defensive effect for every team,
         plus a league-wide home advantage. Goals are modelled with a Poisson
         distribution. Recent games receive more weight than older games using
-        the selected half-life.
+        the selected half-life. Selecting an earlier training season downloads
+        and combines every season from that point through the current season;
+        the team selectors still show only clubs active in the current season.
 
         The displayed odds are no-margin model estimates. They are illustrative,
         not financial or betting advice. A production forecasting system should
@@ -183,7 +213,7 @@ with st.expander("How the model works"):
 
 st.divider()
 st.markdown(
-    f"[View the data used for this model]({data_url}) · "
+    f"[View the latest season data]({latest_data_url}) · "
     "[View the source code](https://github.com/FlynnT52/Soccer_Modelling_Python)"
 )
 
