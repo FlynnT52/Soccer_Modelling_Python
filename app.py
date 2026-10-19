@@ -96,7 +96,7 @@ with st.sidebar:
         min_value=90,
         max_value=730,
         value=365,
-        step=30,
+        step=5,
         help="Lower values give recent matches more influence.",
     )
 
