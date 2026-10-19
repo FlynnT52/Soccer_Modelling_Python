@@ -26,6 +26,12 @@ soccer-model = "soccer_model.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Streamlit Community Cloud currently installs pyproject projects through
+# Poetry. Declare the src-layout explicitly so both Poetry and setuptools find
+# the same package.
+[tool.poetry]
+packages = [{ include = "soccer_model", from = "src" }]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

@@ -1,0 +1,5 @@
+# Streamlit Community Cloud uses this file to select pip rather than treating
+# the PEP 621 project as an implicit Poetry project. Installing the repository
+# also installs all runtime dependencies declared in pyproject.toml.
+-e .
+
