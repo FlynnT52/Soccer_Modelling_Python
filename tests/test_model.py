@@ -11,6 +11,7 @@ from soccer_model.model import (
     matches_from_json,
     season_code,
 )
+from soccer_model.evaluation import chronological_backtest
 
 
 @pytest.fixture
@@ -71,4 +72,30 @@ def test_cached_matches_json_round_trip(matches):
     serialized = matches.to_json(orient="split", date_format="iso")
     restored = matches_from_json(serialized)
     pd.testing.assert_frame_equal(restored, matches)
+
+
+def test_chronological_backtest_reports_probability_metrics():
+    teams = ["Alpha", "Beta", "Gamma", "Delta"]
+    rows = []
+    for index in range(40):
+        home = teams[index % len(teams)]
+        away = teams[(index + 1 + index // len(teams)) % len(teams)]
+        if home == away:
+            away = teams[(teams.index(away) + 1) % len(teams)]
+        rows.append(
+            {
+                "Date": pd.Timestamp("2025-01-01") + pd.Timedelta(days=index * 3),
+                "HomeTeam": home,
+                "AwayTeam": away,
+                "FTHG": (index * 3) % 4,
+                "FTAG": (index * 2 + 1) % 3,
+            }
+        )
+    result = chronological_backtest(pd.DataFrame(rows), test_fraction=0.25)
+    assert result.training_matches == 30
+    assert result.test_matches == 10
+    assert 0 <= result.accuracy <= 1
+    assert result.log_loss >= 0
+    assert result.baseline_log_loss >= 0
+    assert 0 <= result.ranked_probability_score <= 1
 

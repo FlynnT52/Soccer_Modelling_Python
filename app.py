@@ -8,6 +8,7 @@ import streamlit as st
 
 from soccer_model import (
     PoissonFootballModel,
+    chronological_backtest,
     current_season_start,
     football_data_url,
     load_matches,
@@ -54,6 +55,14 @@ def fit_model(matches_csv: str, half_life_days: float) -> PoissonFootballModel:
     return PoissonFootballModel.fit(matches, half_life_days=half_life_days)
 
 
+@st.cache_data(show_spinner=False)
+def evaluate_model(matches_csv: str, half_life_days: float):
+    """Evaluate on the latest 20% without training on those results."""
+
+    matches = matches_from_json(matches_csv)
+    return chronological_backtest(matches, half_life_days=half_life_days)
+
+
 def scoreline_table(matrix: pd.DataFrame, home_team: str, away_team: str) -> pd.DataFrame:
     rows = [
         {
@@ -73,8 +82,17 @@ st.set_page_config(
 )
 
 st.title("⚽ Football Match Predictor")
+st.markdown("### Flynn Thompson · Data Science Portfolio Project")
+st.write(
+    "An interactive football forecasting project that turns historical match "
+    "results into expected goals, exact-score distributions and match-result probabilities."
+)
 st.caption(
-    "A recency-weighted Poisson model trained on results from football-data.co.uk."
+    "Python · pandas · SciPy · statsmodels · Streamlit · Data: football-data.co.uk"
+)
+st.markdown(
+    "[View source code](https://github.com/FlynnT52/Soccer_Modelling_Python) · "
+    "Use the controls below to explore the model"
 )
 
 with st.sidebar:
@@ -130,6 +148,7 @@ st.success(
     f"{matches['Date'].min():%d %B %Y} through {latest_result:%d %B %Y}."
 )
 
+st.header("Interactive match predictor")
 selection_left, selection_right = st.columns(2)
 with selection_left:
     home_team = st.selectbox("Home team", current_teams, index=0)
@@ -204,6 +223,92 @@ with st.expander("How the model works"):
         the selected half-life. Selecting an earlier training season downloads
         and combines every season from that point through the current season;
         the team selectors still show only clubs active in the current season.
+        """
+    )
+
+st.header("Out-of-sample model evaluation")
+st.write(
+    "To avoid evaluating the model on matches it has already seen, the earliest "
+    "80% of the selected data is used for training and the latest 20% is held "
+    "back for testing. Lower log loss and Ranked Probability Score are better."
+)
+
+try:
+    with st.spinner("Running chronological backtest…"):
+        evaluation = evaluate_model(serialized_matches, float(half_life))
+
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("Holdout accuracy", f"{evaluation.accuracy:.1%}")
+    metric_columns[1].metric("Model log loss", f"{evaluation.log_loss:.3f}")
+    metric_columns[2].metric("Baseline log loss", f"{evaluation.baseline_log_loss:.3f}")
+    metric_columns[3].metric(
+        "Ranked Probability Score", f"{evaluation.ranked_probability_score:.3f}"
+    )
+
+    if evaluation.log_loss < evaluation.baseline_log_loss:
+        improvement = 1 - evaluation.log_loss / evaluation.baseline_log_loss
+        st.success(
+            f"The model's holdout log loss is {improvement:.1%} lower than the "
+            "historical home/draw/away frequency baseline."
+        )
+    else:
+        st.info(
+            "On this holdout period the simple historical-frequency baseline has "
+            "a lower log loss. This is useful evidence for further model improvement."
+        )
+
+    with st.expander("View holdout details and recent test predictions"):
+        st.write(
+            f"Trained on {evaluation.training_matches} matches and evaluated on "
+            f"{evaluation.test_matches}. {evaluation.skipped_matches} matches were "
+            "skipped because a team had not appeared in the training period."
+        )
+        prediction_labels = {
+            "home_win": "Home win",
+            "draw": "Draw",
+            "away_win": "Away win",
+        }
+        display_predictions = evaluation.predictions.tail(20).copy()
+        display_predictions["Actual"] = display_predictions["Actual"].map(prediction_labels)
+        display_predictions["Predicted"] = display_predictions["Predicted"].map(
+            prediction_labels
+        )
+        st.dataframe(
+            display_predictions.style.format(
+                {"home_win": "{:.1%}", "draw": "{:.1%}", "away_win": "{:.1%}"}
+            ),
+            hide_index=True,
+            use_container_width=True,
+        )
+except Exception as error:
+    st.info(f"Backtesting is unavailable for this selection: {error}")
+
+with st.expander("Project case study, skills and limitations"):
+    st.markdown(
+        """
+        **Problem.** Convert publicly available football results into transparent,
+        interactive probability forecasts rather than a single unexplained score.
+
+        **Data pipeline.** The application downloads each selected season, validates
+        the required columns, removes unplayed fixtures, combines the seasons and
+        refreshes its cached data every hour.
+
+        **Modelling.** A Poisson generalized linear model estimates team attack,
+        team defence and league-wide home advantage. Exponential time weights let
+        users control how quickly older matches lose influence.
+
+        **Engineering.** The project uses a reusable Python package, automated tests,
+        explicit dependency management, caching and continuous deployment from
+        GitHub to Streamlit Community Cloud.
+
+        **Limitations.** The model does not currently use injuries, expected line-ups,
+        player strength, red cards or other match context. It also assumes the two
+        teams' goal totals are conditionally independent. Forecasts are illustrative,
+        not betting or financial advice.
+
+        **Potential improvements.** Add rolling-origin validation, calibration plots,
+        a Dixon–Coles low-score adjustment, automated fixture ingestion and richer
+        team/player features.
         """
     )
 
